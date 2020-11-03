@@ -1,0 +1,11 @@
+body {
+  color: #f7f7f7;
+  background-color: black;
+}
+
+.jumbotron {
+  background-image: url("../images/mars_explorer.jpg");
+  background-size: 100% 100%;
+  text-align: center;
+  background-color: #FF5733;
+}
