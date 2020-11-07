@@ -3,29 +3,33 @@ from splinter import Browser
 from bs4 import BeautifulSoup as soup
 import pandas as pd
 import datetime as dt
+from collections import defaultdict
 
+# Set the executable path and initialize the chrome browser in splinter
+executable_path = {'executable_path': 'chromedriver'}
 
 def scrape_all():
-    # Initiate headless driver for deployment
-    browser = Browser("chrome", executable_path="chromedriver", headless=True)
+   # Initiate headless driver for deployment
+   browser = Browser("chrome", **executable_path, headless=True)
+   news_title, news_paragraph = mars_news(browser)
 
-    news_title, news_paragraph = mars_news(browser)
+   # Run all scraping functions and store results in a dictionary
+   data = {
+       "news_title": news_title,
+       "news_paragraph": news_paragraph,
+       "featured_image": featured_image(browser),
+       "facts": mars_facts(),
+       'hemisphere': mars_hemisphere(browser),
+       "last_modified": dt.datetime.now()
+   }
 
-    # Run all scraping functions and store results in a dictionary
-    data = {
-        "news_title": news_title,
-        "news_paragraph": news_paragraph,
-        "featured_image": featured_image(browser),
-        "facts": mars_facts(),
-        "last_modified": dt.datetime.now()
-    }
-
-    # Stop webdriver and return data
-    browser.quit()
-    return data
+   # Stop webdriver and return data
+   browser.quit()
+   return data
 
 
 def mars_news(browser):
+
     # Scrape Mars News
     # Visit the mars nasa news site
     url = 'https://mars.nasa.gov/news/'
@@ -79,9 +83,10 @@ def featured_image(browser):
         return None
 
     # Use the base url to create an absolute url
-    img_url = f'https://www.jpl.nasa.gov/{img_url_rel}'
+    img_url = f'https://www.jpl.nasa.gov{img_url_rel}'
 
     return img_url
+
 
 def mars_facts():
     # Add try/except for error handling
@@ -93,16 +98,50 @@ def mars_facts():
         return None
 
     # Assign columns and set index of dataframe
-    df.columns=['Description', 'Mars']
+    df.columns = ['Description', 'Mars']
     df.set_index('Description', inplace=True)
 
     # Convert dataframe into HTML format, add bootstrap
-    return df.to_html(classes="table table-striped")
+    return df.to_html(classes="table table-condensed table-striped table-hover")
+
+
+def mars_hemisphere(browser):
+    url = 'https://astrogeology.usgs.gov/search/results?q=hemisphere+enhanced&k1=target&v1=Mars'
+    host_url = 'https://astrogeology.usgs.gov'
+    browser.visit(url)
+
+    # set up soup
+    html = browser.html
+    hemi_soup = soup(html, 'html.parser')
+
+    # scrap the links and extract hemisphere title, link to individual hemisphere page, and thumnail
+    links = hemi_soup.find_all('a', class_='itemLink')
+
+    link_dict = defaultdict(dict)
+    for link in links:
+        href = link['href']
+        thumb = link.find('img')
+        if thumb:
+            link_dict[href]['thumb'] = f"{host_url}{thumb.get('src')}"
+
+        title = link.find('h3')
+        if title:
+            link_dict[href]['title'] = title.get_text()
+
+    mars_hemisphere = [{'href': href, 'title': link_dict[href]['title'], 'thumb': link_dict[href]['thumb']} for href in
+                       link_dict]
+
+    # Follow link to get full hemisphere image URL
+    for item in mars_hemisphere:
+        url = f"{host_url}{item['href']}"
+        browser.visit(url)
+        html = browser.html
+        img_soup = soup(html, 'html.parser')
+        img_url = img_soup.find('a', string='Sample')['href']
+        item['img_url'] = img_url
+
+    return mars_hemisphere
 
 if __name__ == "__main__":
-
     # If running as script, print scraped data
-    data = scrape_all()
-    image = data["featured_image"]
-    print('image type:', type(image))
-    
+    print(scrape_all())
